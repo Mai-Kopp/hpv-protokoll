@@ -1,0 +1,1825 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>HPV EUROArray – Protokoll</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2128;
+    --border:  #21262d;
+    --muted:   #8b949e;
+    --text:    #e6edf3;
+    --accent:  #58a6ff;
+    --warn:    #f0883e;
+    --danger:  #f85149;
+    --ok:      #3fb950;
+    --dim:     #30363d;
+    --radius:  12px;
+  }
+
+  html, body {
+    height: 100%; background: var(--bg); color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    overflow: hidden;
+  }
+
+  /* ── Shell ── */
+  .shell {
+    display: flex; flex-direction: column;
+    height: 100vh; max-width: 480px; margin: 0 auto;
+    position: relative;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0; background: var(--bg); z-index: 10;
+  }
+  .topbar-protocol {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: .6rem; color: var(--accent);
+    letter-spacing: .1em; text-transform: uppercase;
+    flex: 1;
+  }
+  .topbar-progress {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: .65rem; color: var(--muted);
+  }
+
+  /* ── Step rail (collapsible overview) ── */
+  .step-rail {
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    overflow: hidden;
+    transition: max-height .3s ease;
+    max-height: 48px;
+  }
+  .step-rail.open { max-height: 200px; }
+
+  .rail-toggle {
+    display: flex; align-items: center; gap: .6rem;
+    padding: .7rem 1rem; cursor: pointer;
+    user-select: none;
+  }
+  .rail-toggle-label {
+    font-size: .78rem; font-weight: 600; flex: 1;
+    color: var(--text);
+  }
+  .rail-toggle-sub {
+    font-size: .68rem; color: var(--muted);
+  }
+  .rail-chevron {
+    font-size: .7rem; color: var(--muted);
+    transition: transform .25s;
+  }
+  .step-rail.open .rail-chevron { transform: rotate(180deg); }
+
+  .rail-steps {
+    display: flex; flex-direction: column;
+    padding: .25rem .75rem .75rem;
+    gap: .2rem;
+  }
+  .rail-step {
+    display: flex; align-items: center; gap: .65rem;
+    padding: .4rem .5rem; border-radius: 6px;
+    cursor: pointer; transition: background .12s;
+  }
+  .rail-step:hover { background: #ffffff08; }
+  .rail-step.active { background: #58a6ff12; }
+  .rail-dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: .55rem; font-family: 'IBM Plex Mono', monospace;
+    flex-shrink: 0; background: var(--bg);
+  }
+  .rail-step.done .rail-dot { background: var(--ok); border-color: var(--ok); color: #0d1117; }
+  .rail-step.active .rail-dot { background: var(--accent); border-color: var(--accent); color: #0d1117; }
+  .rail-step-title { font-size: .75rem; color: var(--muted); }
+  .rail-step.active .rail-step-title { color: var(--text); font-weight: 500; }
+  .rail-step.done .rail-step-title { color: var(--ok); }
+
+  /* ── Progress bar ── */
+  .prog-track {
+    height: 2px; background: var(--dim); flex-shrink: 0;
+  }
+  .prog-fill {
+    height: 100%; background: var(--accent); transition: width .4s ease;
+  }
+
+  /* ── Card viewport ── */
+  .card-viewport {
+    flex: 1; overflow-y: auto;
+    padding: 1rem 1rem 0;
+    scroll-behavior: smooth;
+  }
+
+  /* ── Substep dots ── */
+  .substep-dots {
+    display: flex; justify-content: center; gap: .4rem;
+    padding: .6rem 0 .5rem; flex-shrink: 0;
+  }
+  .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--dim); transition: background .2s, transform .2s;
+  }
+  .dot.done { background: var(--ok); }
+  .dot.active { background: var(--accent); transform: scale(1.4); }
+
+  /* ── Bottom nav ── */
+  .bottom-nav {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .75rem 1rem 1rem;
+    flex-shrink: 0; background: var(--bg);
+    border-top: 1px solid var(--border);
+  }
+  .nav-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border-radius: 10px;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--muted); font-size: 1.1rem; cursor: pointer;
+    transition: border-color .15s, color .15s, background .15s;
+    flex-shrink: 0;
+  }
+  .nav-btn:hover:not(:disabled) { border-color: var(--muted); color: var(--text); }
+  .nav-btn:disabled { opacity: .25; cursor: default; }
+  .confirm-btn {
+    flex: 1; height: 44px; border-radius: 10px; border: none;
+    background: var(--accent); color: #0d1117;
+    font-family: 'IBM Plex Sans', sans-serif; font-size: .88rem;
+    font-weight: 600; cursor: pointer;
+    transition: background .15s, transform .1s;
+    display: flex; align-items: center; justify-content: center; gap: .5rem;
+  }
+  .confirm-btn:active { transform: scale(.98); }
+  .confirm-btn:hover { background: #79c0ff; }
+  .confirm-btn.done { background: transparent; border: 1px solid var(--ok); color: var(--ok); cursor: default; }
+  .confirm-btn:disabled { background: var(--dim); color: var(--muted); cursor: not-allowed; }
+
+  /* ── Card ── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+    animation: slideIn .2s ease;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(16px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .card-head {
+    padding: .85rem 1rem .7rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .card-eyebrow {
+    display: flex; align-items: center; gap: .5rem;
+    margin-bottom: .3rem;
+  }
+  .card-id {
+    font-family: 'IBM Plex Mono', monospace; font-size: .6rem;
+    color: var(--muted); letter-spacing: .06em;
+  }
+  .card-badge {
+    font-family: 'IBM Plex Mono', monospace; font-size: .58rem;
+    padding: .12rem .45rem; border-radius: 20px; letter-spacing: .04em;
+  }
+  .badge-warn   { background: #f0883e1a; color: var(--warn);   border: 1px solid #f0883e40; }
+  .badge-danger { background: #f851491a; color: var(--danger); border: 1px solid #f8514940; }
+  .badge-ok     { background: #3fb9501a; color: var(--ok);     border: 1px solid #3fb95040; }
+  .badge-info   { background: #58a6ff1a; color: var(--accent); border: 1px solid #58a6ff40; }
+
+  .card-icon-title {
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .card-icon { font-size: 1.2rem; }
+  .card-title { font-size: 1rem; font-weight: 600; }
+  .card-timing {
+    margin-top: .3rem;
+    font-size: .72rem; color: var(--warn);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .card-body { padding: 1rem; display: flex; flex-direction: column; gap: .85rem; }
+
+  /* ── Section types ── */
+  .s-label {
+    font-family: 'IBM Plex Mono', monospace; font-size: .58rem;
+    text-transform: uppercase; letter-spacing: .1em; color: var(--dim);
+    margin-bottom: .4rem;
+  }
+
+  /* warning / danger / info */
+  .warn-box {
+    display: flex; gap: .6rem; align-items: flex-start;
+    border-radius: 8px; padding: .7rem .85rem;
+    font-size: .8rem; line-height: 1.55;
+  }
+  .warn-box.warn   { background: #f0883e0d; border: 1px solid #f0883e35; color: #f0a05a; }
+  .warn-box.danger { background: #f851490d; border: 1px solid #f8514935; color: #f87171; }
+  .warn-box.info   { background: #58a6ff0d; border: 1px solid #58a6ff35; color: #79c0ff; }
+  .warn-icon { flex-shrink: 0; font-size: .9rem; margin-top: .05rem; }
+
+  /* checklist */
+  .checklist { display: flex; flex-direction: column; gap: .5rem; }
+  .check-item {
+    display: flex; gap: .65rem; align-items: flex-start;
+    font-size: .85rem; color: #a8b8c8; line-height: 1.5;
+    padding: .5rem .65rem; background: var(--surface2);
+    border-radius: 8px; border: 1px solid var(--border);
+    cursor: pointer; transition: border-color .15s, background .15s;
+    user-select: none;
+  }
+  .check-item.checked {
+    border-color: var(--ok); background: #3fb9500a; color: var(--muted);
+    text-decoration: line-through; text-decoration-color: var(--dim);
+  }
+  .check-box {
+    width: 18px; height: 18px; border-radius: 5px;
+    border: 1px solid var(--border); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .7rem; margin-top: .1rem;
+    transition: background .15s, border-color .15s;
+  }
+  .check-item.checked .check-box {
+    background: var(--ok); border-color: var(--ok); color: #0d1117;
+  }
+  .check-text strong { color: var(--text); }
+  .check-item.checked .check-text strong { color: var(--muted); }
+
+  /* params */
+  .param-strip { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .param-chip {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: .45rem .7rem;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .param-chip .p-label { font-size: .58rem; color: var(--muted); display: block; margin-bottom: .1rem; }
+  .param-chip .p-val { font-size: .85rem; font-weight: 600; color: var(--text); }
+  .param-chip .p-val.crit { color: var(--warn); }
+
+  /* timer */
+  .timer-block { text-align: center; }
+  .timer-lbl { font-family: 'IBM Plex Mono', monospace; font-size: .6rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: .3rem; }
+  .timer-display { font-family: 'IBM Plex Mono', monospace; font-size: 2.8rem; font-weight: 600; color: var(--ok); letter-spacing: .05em; line-height: 1; margin-bottom: .6rem; }
+  .timer-start-btn {
+    width: 100%; padding: .6rem; border-radius: 8px;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--muted); font-family: 'IBM Plex Sans', sans-serif;
+    font-size: .82rem; cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .timer-start-btn:hover { border-color: var(--ok); color: var(--ok); }
+  .timer-start-btn.running { border-color: var(--ok); color: var(--ok); }
+  .timer-start-btn.warn-timer { border-color: var(--warn); color: var(--warn); }
+  .timer-start-btn.warn-timer:hover { border-color: var(--warn); color: var(--warn); }
+
+  /* calculator */
+  .calc-block { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: .85rem; }
+  .calc-q { font-size: .85rem; font-weight: 600; margin-bottom: .75rem; }
+  .calc-row { display: flex; align-items: center; gap: .75rem; margin-bottom: .6rem; }
+  .calc-row label { font-size: .78rem; color: var(--muted); flex: 1; }
+  .stepper { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .stepper button {
+    width: 38px; height: 38px; background: var(--surface); border: none;
+    color: var(--muted); font-size: 1.1rem; cursor: pointer;
+    transition: background .12s; flex-shrink: 0;
+  }
+  .stepper button:hover { background: var(--border); color: var(--text); }
+  .stepper input {
+    width: 52px; background: transparent; border: none;
+    border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+    color: var(--text); font-family: 'IBM Plex Mono', monospace;
+    font-size: .95rem; font-weight: 600; text-align: center; height: 38px; outline: none;
+  }
+  .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .calc-result { margin-top: .75rem; display: none; }
+  .calc-result.visible { display: block; }
+  .result-chips { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .75rem; }
+  .r-chip {
+    background: #58a6ff0d; border: 1px solid #58a6ff30;
+    border-radius: 7px; padding: .35rem .65rem;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .r-chip .r-lbl { font-size: .57rem; color: var(--muted); display: block; margin-bottom: .1rem; }
+  .r-chip .r-val { font-size: .85rem; font-weight: 600; color: var(--accent); }
+  .vol-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+  .vol-table td { padding: .45rem 0; border-bottom: 1px solid var(--border); }
+  .vol-table tr:last-child td { border-bottom: none; }
+  .vol-table td:last-child { text-align: right; font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--ok); }
+  .vol-name { font-weight: 500; font-size: .82rem; }
+  .vol-sub { font-size: .68rem; color: var(--muted); }
+  .nk-hint { margin-top: .6rem; font-size: .75rem; color: var(--warn); font-family: 'IBM Plex Mono', monospace; }
+
+  /* wash sequence */
+  .wash-seq { display: flex; flex-direction: column; gap: .4rem; }
+  .wash-row {
+    display: flex; align-items: center; gap: .65rem;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: .55rem .75rem;
+  }
+  .wash-cuv { font-family: 'IBM Plex Mono', monospace; font-size: .68rem; color: var(--accent); min-width: 62px; }
+  .wash-time { font-family: 'IBM Plex Mono', monospace; font-size: .82rem; font-weight: 600; min-width: 56px; color: var(--warn); }
+  .wash-time.crit { color: var(--danger); }
+  .wash-desc { font-size: .75rem; color: var(--muted); flex: 1; }
+
+  /* wash timers */
+  .wash-row-wrap { display: flex; flex-direction: column; }
+  .wash-row-wrap + .wash-row-wrap { margin-top: .4rem; }
+  .wash-row-wrap.wash-crit { border-left: 2px solid var(--danger); padding-left: .5rem; border-radius: 0 8px 8px 0; background: #f851490a; margin-left: -.5rem; }
+  .wash-timer-btn {
+    width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); cursor: pointer; font-size: .8rem;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    transition: border-color .12s, color .12s, background .12s;
+  }
+  .wash-timer-btn:hover:not(:disabled) { border-color: var(--ok); color: var(--ok); }
+  .wash-timer-btn.running { border-color: var(--accent); color: var(--accent); }
+  .wash-timer-btn.done { border-color: var(--ok); color: var(--ok); background: #3fb95015; }
+  .wash-timer-bar { display: none; padding: 0 .75rem .5rem; }
+  .wash-timer-bar.visible { display: block; }
+  .wash-timer-display {
+    font-family: 'IBM Plex Mono', monospace; font-size: 1.6rem; font-weight: 600;
+    text-align: center; margin-bottom: .35rem; letter-spacing: .05em;
+  }
+  .wash-progress-track { height: 4px; background: var(--dim); border-radius: 2px; overflow: hidden; }
+  .wash-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width .9s linear; }
+  .wash-progress-fill.fill-crit { background: var(--danger); }
+
+  /* info box */
+  .info-box {
+    background: #58a6ff0d; border: 1px solid #58a6ff30;
+    border-radius: 8px; padding: .65rem .85rem;
+    font-size: .8rem; color: #79c0ff; line-height: 1.5;
+  }
+
+  .optimal-hint {
+    font-family: 'IBM Plex Mono', monospace; font-size: .72rem;
+    color: var(--ok); margin-top: .5rem; text-align: center;
+  }
+  .ot-voll { color: var(--ok); }
+  .ot-frei { color: var(--warn); }
+  .r-chip-warn { background: #f0883e0d; border-color: #f0883e40; }
+
+  /* NK modus toggle */
+  .nk-toggle-wrap { margin-top: .65rem; }
+  .nk-toggle {
+    display: flex; gap: .5rem; margin-bottom: .5rem;
+  }
+  .nk-opt {
+    flex: 1; padding: .55rem .5rem; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--muted); cursor: pointer;
+    transition: border-color .15s, background .15s, color .15s;
+    text-align: center; line-height: 1.4;
+  }
+  .nk-opt:hover { border-color: var(--muted); }
+  .nk-opt.active {
+    border-color: var(--accent); background: #58a6ff12; color: var(--text);
+  }
+  .nk-opt-count {
+    display: block; font-family: 'IBM Plex Mono', monospace;
+    font-size: .95rem; font-weight: 600; color: var(--accent);
+  }
+  .nk-opt.active .nk-opt-count { color: var(--accent); }
+  .nk-opt-label {
+    display: block; font-size: .62rem; color: var(--muted); margin-top: .15rem;
+  }
+  .nk-ot-breakdown {
+    display: flex; flex-direction: column; gap: .2rem;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: .5rem .7rem;
+  }
+  .nk-ot-row {
+    display: flex; justify-content: space-between;
+    font-family: 'IBM Plex Mono', monospace; font-size: .72rem;
+  }
+  .nk-ot-label { color: var(--accent); }
+  .nk-ot-detail { color: var(--muted); }
+  .nk-single-hint {
+    font-family: 'IBM Plex Mono', monospace; font-size: .72rem;
+    color: var(--ok); margin-top: .4rem;
+  }
+
+  /* ── Samplesheet ── */
+  .samplesheet { display: flex; flex-direction: column; gap: .5rem; }
+  .sample-row {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; padding: .7rem .8rem; transition: border-color .15s;
+  }
+  .sample-row.row-optimal { border-color: #3fb95045; }
+  .sample-row.row-low     { border-color: #f0883e45; }
+  .sample-row.row-weak    { border-color: #f8514945; }
+  .sample-row.row-high    { border-color: #f8514945; }
+  .sample-row.row-nk      { border-color: var(--dim); opacity: .8; }
+
+  .sample-head {
+    display: flex; align-items: center; gap: .5rem; margin-bottom: .55rem;
+  }
+  .tube-nr {
+    font-family: 'IBM Plex Mono', monospace; font-size: .68rem;
+    color: var(--accent); background: #58a6ff12; border: 1px solid #58a6ff30;
+    border-radius: 5px; padding: .1rem .45rem; flex-shrink: 0; min-width: 2rem; text-align: center;
+  }
+  .tube-nr.nk { color: var(--muted); background: transparent; border-color: var(--border); }
+  .fn-input {
+    flex: 1; background: transparent; border: none; border-bottom: 1px solid var(--border);
+    color: var(--text); font-family: 'IBM Plex Sans', sans-serif; font-size: .82rem;
+    padding: .15rem .2rem; outline: none; transition: border-color .15s;
+  }
+  .fn-input:focus { border-color: var(--accent); }
+  .fn-input::placeholder { color: var(--dim); font-size: .75rem; }
+  .input-badge {
+    font-family: 'IBM Plex Mono', monospace; font-size: .65rem;
+    padding: .1rem .4rem; border-radius: 4px; flex-shrink: 0;
+  }
+  .badge-optimal { background: #3fb9501a; color: var(--ok); }
+  .badge-low     { background: #f0883e1a; color: var(--warn); }
+  .badge-weak    { background: #f851491a; color: var(--danger); }
+  .badge-high    { background: #f851491a; color: var(--danger); }
+  .badge-empty   { background: transparent; color: var(--dim); }
+
+  .sample-fields {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .4rem .5rem;
+  }
+  .sf { display: flex; flex-direction: column; gap: .15rem; }
+  .sf label {
+    font-family: 'IBM Plex Mono', monospace; font-size: .57rem;
+    text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+  }
+  .sf input {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-family: 'IBM Plex Mono', monospace;
+    font-size: .85rem; font-weight: 600; padding: .35rem .5rem;
+    outline: none; width: 100%; transition: border-color .15s, color .15s;
+  }
+  .sf input:focus { border-color: var(--accent); }
+  .sf input[readonly] { cursor: default; background: transparent; border-color: transparent; }
+  .sf input.v-optimal { color: var(--ok); }
+  .sf input.v-low     { color: var(--warn); }
+  .sf input.v-weak    { color: var(--danger); }
+  .sf input.v-high    { color: var(--danger); }
+  .sf input.v-empty   { color: var(--dim); }
+
+  .dil-row { margin-top: .4rem; display: flex; align-items: center; gap: .4rem; }
+  .dil-toggle {
+    font-size: .68rem; color: var(--muted); background: transparent;
+    border: 1px solid var(--border); border-radius: 5px; padding: .15rem .5rem;
+    cursor: pointer; transition: border-color .15s, color .15s; white-space: nowrap; flex-shrink: 0;
+  }
+  .dil-toggle:hover { border-color: var(--accent); color: var(--accent); }
+  .dil-toggle.open  { border-color: var(--accent); color: var(--accent); }
+  .dil-field {
+    flex: 1; display: none; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-family: 'IBM Plex Mono', monospace;
+    font-size: .8rem; padding: .3rem .5rem; outline: none;
+  }
+  .dil-field.visible { display: block; }
+  .dil-field:focus { border-color: var(--accent); }
+
+  .ss-summary {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: .6rem .8rem; font-family: 'IBM Plex Mono', monospace; font-size: .72rem;
+    color: var(--muted); display: flex; gap: 1rem; flex-wrap: wrap;
+  }
+  .ss-summary span { white-space: nowrap; }
+  .ss-summary .s-ok   { color: var(--ok); }
+  .ss-summary .s-warn { color: var(--warn); }
+  .ss-summary .s-bad  { color: var(--danger); }
+
+  /* note field */
+  .note-block { display: flex; flex-direction: column; gap: .35rem; }
+  .note-field {
+    width: 100%; min-height: 64px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-family: 'IBM Plex Sans', sans-serif;
+    font-size: .82rem; line-height: 1.5; padding: .6rem .75rem;
+    resize: vertical; outline: none;
+    transition: border-color .15s;
+  }
+  .note-field:focus { border-color: var(--accent); }
+  .note-field::placeholder { color: var(--dim); }
+
+  /* pdf button */
+  .pdf-btn {
+    width: 100%; padding: .7rem; border-radius: 8px; border: none;
+    background: #3fb9501a; border: 1px solid #3fb95040; color: var(--ok);
+    font-family: 'IBM Plex Sans', sans-serif; font-size: .88rem; font-weight: 600;
+    cursor: pointer; margin-bottom: 1rem;
+    transition: background .15s;
+  }
+  .pdf-btn:hover { background: #3fb95030; }
+
+  /* log rows */
+  .log-row { display: flex; align-items: baseline; gap: .4rem; flex-wrap: wrap; line-height: 1.8; }
+  .log-id { color: var(--accent); min-width: 3.5rem; }
+  .log-title { flex: 1; }
+  .log-note { width: 100%; padding-left: 3.9rem; color: var(--warn); font-style: italic; font-size: .68rem; }
+
+  /* area-change banner */
+  .area-change {
+    display: flex; align-items: center; gap: .6rem;
+    padding: .6rem 1rem;
+    font-size: .8rem; font-weight: 600;
+    letter-spacing: .02em;
+  }
+  .area-change.area-danger {
+    background: #f851490d; border-bottom: 1px solid #f8514935; color: #f87171;
+  }
+  .area-change.area-info {
+    background: #58a6ff0d; border-bottom: 1px solid #58a6ff30; color: #79c0ff;
+  }
+  .area-icon { font-size: 1rem; }
+
+  /* complete */
+  .complete-card {
+    background: var(--surface); border: 1px solid var(--ok);
+    border-radius: var(--radius); padding: 2rem 1.5rem;
+    text-align: center; animation: slideIn .25s ease;
+  }
+  .complete-icon { font-size: 3rem; margin-bottom: 1rem; }
+  .complete-card h2 { font-size: 1.2rem; font-weight: 600; margin-bottom: .4rem; }
+  .complete-card p { font-size: .82rem; color: var(--muted); margin-bottom: 1.25rem; }
+  .log { text-align: left; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: .75rem; font-family: 'IBM Plex Mono', monospace; font-size: .7rem; color: var(--muted); line-height: 1.9; }
+  .log .ok { color: var(--ok); }
+  .log .dim { color: var(--dim); }
+  .restart-btn { margin-top: 1.25rem; background: transparent; border: 1px solid var(--border); color: var(--muted); padding: .55rem 1.4rem; border-radius: 8px; cursor: pointer; font-family: 'IBM Plex Sans', sans-serif; font-size: .82rem; }
+
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-protocol">06 AA INF 001 · EUROArray HPV</div>
+    <div class="topbar-progress" id="topProgress">1 / 17</div>
+  </div>
+
+  <!-- Step rail -->
+  <div class="step-rail" id="stepRail">
+    <div class="rail-toggle" onclick="toggleRail()">
+      <div class="rail-toggle-label" id="railLabel">5.1 PCR-Ansatz</div>
+      <div class="rail-toggle-sub" id="railSub">Schritt 1 von 4</div>
+      <div class="rail-chevron">▼</div>
+    </div>
+    <div class="rail-steps" id="railSteps"></div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+
+  <!-- Card viewport -->
+  <div class="card-viewport" id="cardViewport"></div>
+
+  <!-- Substep dots -->
+  <div class="substep-dots" id="substepDots"></div>
+
+  <!-- Bottom nav -->
+  <div class="bottom-nav">
+    <button class="nav-btn" id="btnBack" onclick="navigate(-1)" disabled>←</button>
+    <button class="confirm-btn" id="btnConfirm" onclick="confirmSubstep()">Bestätigen</button>
+    <button class="nav-btn" id="btnFwd" onclick="navigate(1)" disabled>→</button>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// PROTOCOL DATA — from YAML v0.2
+// ═══════════════════════════════════════════════════════
+const PROTOCOL = {
+  steps: [
+    {
+      id: "5.1", title: "PCR-Ansatz", area: "PCR-Raum",
+      badge: { level: "warn", text: "PCR-Raum" },
+      substeps: [
+        {
+          id: "5.1.1", title: "Probenanzahl festlegen", icon: "🧮",
+          sections: [
+            { type: "calculator" },
+            { type: "confirm", text: "Probenanzahl festgelegt" }
+          ]
+        },
+        {
+          id: "5.1.1b", title: "Samplesheet ausfüllen", icon: "📋",
+          sections: [
+            { type: "samplesheet" },
+            { type: "confirm", text: "Samplesheet vollständig" }
+          ]
+        },
+        {
+          id: "5.1.2", title: "PCR-Mixes auftauen", icon: "🧊",
+          area_change: { label: "Prä-PCR Raum · Hood (hinter Glastür)", level: "info" },
+          sections: [
+            { type: "warning", level: "warn", text: "Max. <strong>1 h</strong> auf Eis belassen — danach Aktivitätsverlust." },
+            { type: "checklist", items: [
+              "PCR-Mix A HPV (<strong>grüner Deckel</strong>) auf Eis/Kühlrack (weiß) legen",
+              "PCR-Mix B HPV (<strong>gelber Deckel</strong>) auf Eis/Kühlrack (weiß) legen"
+            ]},
+            { type: "timer", label: "Auftauzeit", duration_min: 15, optional: true },
+            { type: "confirm", text: "Mixes aufgetaut" }
+          ]
+        },
+        {
+          id: "5.1.3", title: "Mastermix herstellen", icon: "🔬",
+          area_change: { label: "Prä-PCR Raum · Hood (hinter Glastür)", level: "info" },
+          sections: [
+            { type: "reagent_table", note: "Volumina basieren auf Probenanzahl aus 5.1.1" },
+            { type: "checklist", items: [
+              "Mix A + Mix B zusammenpipettieren",
+              "Durch <strong>Invertieren / Anschnippsen</strong> mischen — nicht vortexen"
+            ]},
+            { type: "confirm", text: "Mastermix fertig gemischt" }
+          ]
+        },
+        {
+          id: "5.1.4a", title: "Mastermix vorlegen", icon: "💧",
+          area_change: { label: "Prä-PCR Raum · Hood (hinter Glastür)", level: "info" },
+          sections: [
+            { type: "info_box", text: "Dieser Schritt findet im <strong>Prä-PCR Raum</strong> (hinter der Glastür, unter der Hood) statt. Tubes verschlossen halten." },
+            { type: "checklist", items: [
+              "200 µl PCR-Tubes in <strong>Kühlrack (lila)</strong> aufbewahren",
+              "<strong>20 µl Mastermix</strong> pro Fallprobe in jedes Tube vorlegen",
+              "Tubes <strong>verschlossen</strong> lassen"
+            ]},
+            { type: "confirm", text: "Mastermix in allen Tubes vorgelegt" }
+          ]
+        },
+        {
+          id: "5.1.4b", title: "Raumwechsel → DNA-Zugabe", icon: "🚪",
+          area_change: { label: "→ Durch Glastür zurück in den PCR-Raum (Thermocycler)", level: "danger" },
+          sections: [
+            { type: "warning", level: "danger", text: "<strong>Raumwechsel:</strong> Durch die Glastür zurück in den <strong>PCR-Raum</strong> — hier stehen die Thermocycler. Tubes mit Mastermix mitnehmen. Keine DNA-haltigen Materialien zurück in den Prä-PCR Raum (Hood) bringen." },
+            { type: "checklist", items: [
+              "In den <strong>PCR-Raum</strong> wechseln (Thermocycler)",
+              "<strong>+ 5 µl DNA</strong> pro Tube dazupipettieren (max. 100 ng; bis 200 ng ok — ggf. verdünnen)",
+              "Negativkontrolle: <strong>+ 5 µl nukleasefreies H₂O</strong> in NK-Tube pipettieren",
+              "Alle Tubes: auf- und abpipettieren zum Mischen",
+              "Kurz <strong>abzentrifugieren</strong>"
+            ]},
+            { type: "confirm", text: "DNA zugegeben – Tubes zurück im PCR-Raum" }
+          ]
+        },
+
+        {
+          id: "5.1.6", title: "PCR starten", icon: "⚙️",
+          area_change: { label: "PCR-Raum · Thermocycler", level: "info" },
+          sections: [
+            { type: "warning", level: "warn", text: "Annealing: Nexus <strong>57 °C</strong> / ABI 2720 <strong>58 °C</strong> — nicht verwechseln." },
+            { type: "params", items: [
+              { label: "Nexus Annealing", value: "57 °C", crit: true },
+              { label: "ABI Annealing", value: "58 °C", crit: true },
+              { label: "Laufzeit", value: "~80 min" }
+            ]},
+            { type: "checklist", items: [
+              "Programm: <strong>Anwender → Routine → HPV_EUROIMMUN</strong>",
+              "Tubes in Thermocycler einsetzen",
+              "<strong>Start</strong> drücken"
+            ]},
+            { type: "timer", label: "PCR-Laufzeit", duration_min: 80, optional: false, note: "ca. 1 h 20 min" },
+            { type: "timer", label: "⚠ Vorbereitung 5.2.3 starten", duration_min: 65, optional: false, note: "15 min vor PCR-Ende — OT beschriften & positionieren" },
+            { type: "confirm", text: "PCR gestartet – Tubes im Cycler" }
+          ]
+        }
+      ]
+    },
+    {
+      id: "5.2", title: "Hybridisierung", area: "Post-PCR",
+      badge: { level: "info", text: "Post-PCR" },
+      substeps: [
+        {
+          id: "5.2.1", title: "Station vorheizen", icon: "🌡️",
+          timing_note: "Direkt nach PCR-Start — 45 min Vorlaufzeit",
+          sections: [
+            { type: "params", items: [{ label: "Zieltemperatur", value: "45 °C", crit: true }] },
+            { type: "checklist", items: [
+              "Hybridisierungsstation auf <strong>45 °C</strong> einschalten",
+              "TITERPLANE-Reagenzträger mit Aqua dest. spülen → fusselfreiem Tuch trocknen → auf Station",
+              "<strong>Array-OT</strong> (nicht auspacken) auf Station vorwärmen",
+              "<strong>Hybridisierungspuffer HB-A</strong> (aus Kühlschrank) auf Station vorwärmen"
+            ]},
+            { type: "confirm", text: "Station heizt — alle Teile vorwärmen" }
+          ]
+        },
+        {
+          id: "5.2.2", title: "Lauf in Software anlegen", icon: "💻",
+          sections: [
+            { type: "checklist", items: [
+              "EUROArrayScan-Software öffnen → <strong>Protokolle</strong>",
+              "Laufname: <strong>HPV_Datum_Kürzel</strong>",
+              "Einfügen → OT-Typ: Standard <strong>5 Array</strong>",
+              "Assay: <strong>HPV V2</strong> auswählen",
+              "Patientendaten (Fallnummer) unter <strong>Patienten-ID</strong>",
+              "Negativkontrolle definieren (letzter Array auf letztem OT)",
+              "<strong>Speichern</strong>"
+            ]},
+            { type: "confirm", text: "Lauf angelegt & gespeichert" }
+          ]
+        },
+        {
+          id: "5.2.3", title: "OT beschriften & positionieren", icon: "🏷️",
+          timing_note: "15 min vor Hybridisierung",
+          sections: [
+            { type: "checklist", items: [
+              "OT aus Verpackung nehmen",
+              "Beschriften: <strong>Datum + Nummer</strong>",
+              "Auf TITERPLANE legen: <strong>Array nach oben</strong>, eine Position weiter"
+            ]},
+            { type: "confirm", text: "OT beschriftet & positioniert" }
+          ]
+        },
+        {
+          id: "5.2.4", title: "Puffer zugeben & auftragen", icon: "💉",
+          sections: [
+            { type: "warning", level: "danger", text: "Pipette <strong>senkrecht</strong> halten. Luftblasen <strong>nicht ausblasen</strong> — Kreuzkontaminationsgefahr!" },
+            { type: "checklist", items: [
+              "Pipette mit <strong>PCR Clean Spray</strong> säubern",
+              "Deckel des PCR-Tubes mit Pipettenspitze öffnen",
+              "<strong>65 µl Hybridisierungspuffer</strong> zugeben",
+              "<strong>3× auf- und abpipettieren</strong>",
+              "Beim <strong>4. Mal 65 µl aufnehmen</strong> — nicht ausblasen",
+              "Auf vorgewärmten TITERPLANE nach <strong>Pipettierschema</strong> auftragen",
+              "Array-OT vorsichtig auflegen — <strong>Einkerbung beachten</strong> → Deckel drauf"
+            ]},
+            { type: "confirm", text: "Alle Arrays aufgetragen & abgedeckt" }
+          ]
+        },
+        {
+          id: "5.2.5", title: "Inkubation", icon: "⏳",
+          sections: [
+            { type: "params", items: [
+              { label: "Temperatur", value: "45 °C", crit: true },
+              { label: "Dauer", value: "60 min", crit: true }
+            ]},
+            { type: "timer", label: "Inkubationszeit", duration_min: 60, optional: false },
+            { type: "confirm", text: "Inkubation abgeschlossen" }
+          ]
+        }
+      ]
+    },
+    {
+      id: "5.3", title: "Waschen & Trocknen", area: "Post-PCR",
+      badge: { level: "danger", text: "⚡ Zeitkritisch" },
+      substeps: [
+        {
+          id: "5.3.1", title: "Waschpuffer ansetzen", icon: "🧴",
+          sections: [
+            { type: "warning", level: "warn", text: "WBC 1a/2a immer <strong>zuerst mit VE-Wasser</strong> auffüllen, dann 1b/2b hinzufügen. Keine Schlieren." },
+            { type: "checklist", items: [
+              "<strong>WP1:</strong> WBC 1a (50 ml) + VE-Wasser auf 800 ml + WBC 1b (50 ml) → auf 1 L → Küvette 1+2",
+              "<strong>WP2:</strong> WBC 2a (10 ml) + VE-Wasser auf 400 ml + WBC 2b (10 ml) → auf 500 ml → Küvette 3",
+              "<strong>WP3:</strong> WBC 3 (25 ml) → auf 500 ml → Küvette 4"
+            ]},
+            { type: "confirm", text: "Alle Waschpuffer angesetzt" }
+          ]
+        },
+        {
+          id: "5.3.2", title: "Waschschritte", icon: "🫧",
+          sections: [
+            { type: "warning", level: "info", text: "Jetzt <strong>Luftdruckpumpe einschalten</strong> — braucht Zeit um Druck aufzubauen. Direkt nach dem Waschen wird die Pumpe für 5.3.3 (Trocknen) benötigt." },
+            { type: "wash_sequence", items: [
+              { cuvette: "Küvette 1", buffer: "WP1", duration: "~5 s",        desc: "kurz eintauschen, schwenken", crit: false, timer_s: 5,   repeatable: true },
+              { cuvette: "Küvette 2", buffer: "WP1", duration: "≥ 1 min",     desc: "", crit: false, timer_s: 60,  repeatable: false },
+              { cuvette: "Küvette 3", buffer: "WP2", duration: "genau 2 min", desc: "Zeitkritisch!", crit: true, timer_s: 120, repeatable: false },
+              { cuvette: "Küvette 4", buffer: "WP3", duration: "≥ 5 s",       desc: "", crit: false, timer_s: 5,   repeatable: true }
+            ]},
+            { type: "confirm", text: "Waschschritte abgeschlossen" }
+          ]
+        },
+        {
+          id: "5.3.3", title: "OT trocknen", icon: "💨",
+          sections: [
+            { type: "warning", level: "warn", text: "OT muss <strong>vollständig trocken</strong> sein — Restfeuchtigkeit erzeugt unspezifische Signale." },
+            { type: "checklist", items: [
+              "Mit fusselfreiem Tuch vortrocknen (<strong>nur Unterseite</strong>)",
+              "Mit <strong>Druckluft</strong> vollständig trocknen"
+            ]},
+            { type: "timer", label: "Wartezeit", duration_min: 5, optional: false, note: "Feuchtigkeit muss verdampfen" },
+            { type: "confirm", text: "OT vollständig trocken" }
+          ]
+        }
+      ]
+    },
+    {
+      id: "5.4", title: "Scan & Auswertung", area: "EUROArrayScan",
+      badge: { level: "ok", text: "Abschluss" },
+      substeps: [
+        {
+          id: "5.4.1", title: "OT scannen", icon: "📡",
+          sections: [
+            { type: "params", items: [{ label: "Dauer pro OT", value: "~30 s" }] },
+            { type: "checklist", items: [
+              "Fotoapparat (Scannen) in EUROArrayScan auswählen",
+              "Protokoll für Lauf auswählen",
+              "OT einlegen — <strong>Kerbe beachten</strong>, Reihenfolge prüfen",
+              "<strong>Start</strong> drücken",
+              "Jeden weiteren OT scannen"
+            ]},
+            { type: "confirm", text: "Alle OT gescannt" }
+          ]
+        },
+        {
+          id: "5.4.2", title: "Negativkontrolle prüfen", icon: "⊘",
+          sections: [
+            { type: "warning", level: "danger", text: "<strong>Zuerst NK prüfen</strong> bevor Proben ausgewertet werden." },
+            { type: "checklist", items: [
+              "Fotoapparat (Anzeige) in Software auswählen",
+              "NK darf nur aufweisen: 2× PC · 2× OSI · 2× OSII · <strong>CC1 oder CC2</strong>",
+              "CC1 <strong>und</strong> CC2 beide vorhanden → <strong>Lauf wiederholen</strong>"
+            ]},
+            { type: "confirm", text: "Negativkontrolle geprüft & valide" }
+          ]
+        },
+        {
+          id: "5.4.3", title: "Arrays auswerten", icon: "🔍",
+          sections: [
+            { type: "checklist", items: [
+              "Jeden Array auf <strong>valide / invalide</strong> prüfen",
+              "Spot nicht rund → per <strong>Rechtsklick</strong> entfernen",
+              "Intensitäten zu weit auseinander → Spot mit niedrigerer Intensität wegklicken",
+              "DNA/PCR-PC ohne Signal → Kontroll-PCR + <strong>Rücksprache</strong>",
+              "Schwache Signale: Array-Feld davor auf <strong>Kreuzkontamination</strong> prüfen",
+              "Immer gleicher Genotyp auf einem OT → ggf. wiederholen, Rücksprache"
+            ]},
+            { type: "confirm", text: "Alle Arrays ausgewertet" }
+          ]
+        },
+        {
+          id: "5.3.4", title: "Utensilien reinigen", icon: "🧽",
+          sections: [
+            { type: "info_box", text: "Auswertung abgeschlossen → Waschpuffer werden nicht mehr benötigt." },
+            { type: "checklist", items: [
+              "TITERPLANE in WP1 Küvette 1 vorwaschen → mit Merck-Wasser nachspülen",
+              "In Gefäß mit WP lagern (<strong>10 ml WP2 auf 1 L</strong> — monatlich neu ansetzen)",
+              "Küvetten mit VE-Wasser oder PCR Clean Spray reinigen"
+            ]},
+            { type: "confirm", text: "Utensilien gereinigt" }
+          ]
+        },
+        {
+          id: "5.4.4", title: "Ergebnisse speichern", icon: "💾",
+          sections: [
+            { type: "checklist", items: [
+              "Fotoapparat → Ergebnisse → <strong>Drucken</strong>",
+              "Jeden Fall als PDF: <strong>pa0\\MolPath_Diagnostik\\05-Infektionen\\HPV</strong> → Datum_Fallnummer",
+              "Negativkontrolle ebenfalls als PDF speichern"
+            ]},
+            { type: "info_box", text: "QM-Aufbewahrung: <strong>≥ 10 Jahre</strong> · Patientendaten: gesetzliche Fristen" },
+            { type: "confirm", text: "Alle Ergebnisse gespeichert" }
+          ]
+        }
+      ]
+    }
+  ]
+};
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+const state = {
+  flatSubsteps: [],
+  current: 0,
+  confirmed: new Set(),
+  timerState: {},
+  calcValues: { proben: 1, negativkontrolle: 1, tubes: 2, objekttraeger: 1, leerArrays: 3, nkModus: 'custom' },
+  timestamps: {},
+  checks: {},    // FIX: persistent checkbox state  key: "idx-secIdx-itemIdx" → bool
+  notes: {},      // NEW: notes per substep index → string
+  samples: {}     // samplesheet data: index → {fn, qbit, einsatz, dnaInput, dil, dilText}
+};
+
+PROTOCOL.steps.forEach((step, si) => {
+  step.substeps.forEach((sub, ssi) => {
+    state.flatSubsteps.push({ stepIdx: si, substepIdx: ssi, data: sub });
+  });
+});
+
+const TOTAL = state.flatSubsteps.length;
+
+// ═══════════════════════════════════════════════════════
+// RENDER ENGINE
+// ═══════════════════════════════════════════════════════
+function renderCard(idx) {
+  const { stepIdx, data: sub } = state.flatSubsteps[idx];
+  const step = PROTOCOL.steps[stepIdx];
+
+  if (sub.conditional) {
+    const val = state.calcValues[sub.conditional.field] || 0;
+    const passes = val >= sub.conditional.value;
+    if (!passes) {
+      if (!state.confirmed.has(idx)) { state.confirmed.add(idx); state.timestamps[idx] = now(); }
+      return `<div style="padding:1.5rem 1rem;font-size:.8rem;color:var(--muted);text-align:center;">
+        Schritt übersprungen — keine Negativkontrolle erforderlich</div>`;
+    }
+  }
+
+  let sectionsHTML = '';
+  sub.sections.forEach((sec, si) => {
+    if (sec.type === 'confirm') return;
+    sectionsHTML += renderSection(sec, idx, si);
+  });
+
+  // Notes field
+  const noteVal = (state.notes[idx] || '').replace(/"/g, '&quot;');
+  const noteHTML = `
+    <div class="note-block">
+      <div class="s-label">Notiz zu diesem Schritt</div>
+      <textarea class="note-field" id="note-${idx}" placeholder="Abweichungen, Beobachtungen, Fehler…"
+        oninput="saveNote(${idx})">${noteVal}</textarea>
+    </div>`;
+
+  const badgeHTML = `<span class="card-badge badge-${step.badge.level}">${step.badge.text}</span>`;
+  const areaChangeHTML = sub.area_change
+    ? `<div class="area-change area-${sub.area_change.level}">
+        <span class="area-icon">${sub.area_change.level === 'danger' ? '🚪' : sub.area_change.label.includes('Hood') ? '🧪' : '📍'}</span>
+        <span>${sub.area_change.label}</span>
+       </div>` : '';
+
+  return `
+    <div class="card">
+      ${areaChangeHTML}
+      <div class="card-head">
+        <div class="card-eyebrow">
+          <span class="card-id">${sub.id}</span>
+          ${badgeHTML}
+        </div>
+        <div class="card-icon-title">
+          <span class="card-icon">${sub.icon || ''}</span>
+          <span class="card-title">${sub.title}</span>
+        </div>
+        ${sub.timing_note ? `<div class="card-timing">⏰ ${sub.timing_note}</div>` : ''}
+      </div>
+      <div class="card-body">
+        ${sectionsHTML}
+        ${noteHTML}
+      </div>
+    </div>`;
+}
+
+function renderSection(sec, cardIdx, secIdx) {
+  const uid = `${cardIdx}-${secIdx}`;
+  switch (sec.type) {
+    case 'warning': {
+      const icon = sec.level === 'danger' ? '⚡' : sec.level === 'warn' ? '⚠' : 'ℹ';
+      return `<div class="warn-box ${sec.level}"><span class="warn-icon">${icon}</span><span>${sec.text}</span></div>`;
+    }
+    case 'checklist':
+      return `<div class="checklist">${sec.items.map((item, i) => {
+        const key = `${cardIdx}-${secIdx}-${i}`;
+        const checked = !!state.checks[key];
+        return `<div class="check-item ${checked ? 'checked' : ''}" onclick="toggleCheck('${key}')">
+          <div class="check-box">${checked ? '✓' : ''}</div>
+          <div class="check-text">${item}</div>
+        </div>`;
+      }).join('')}</div>`;
+
+    case 'params':
+      return `<div class="param-strip">${sec.items.map(p =>
+        `<div class="param-chip">
+          <span class="p-label">${p.label}</span>
+          <span class="p-val ${p.crit ? 'crit' : ''}">${p.value}</span>
+        </div>`).join('')}</div>`;
+
+    case 'timer': {
+      const tid = `timer-${uid}`;
+      if (!state.timerState[tid]) state.timerState[tid] = { remaining: sec.duration_min * 60, running: false, done: false };
+      const ts = state.timerState[tid];
+      const m = Math.floor(ts.remaining / 60), s = ts.remaining % 60;
+      const display = ts.done ? '00:00' : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      const isWarnTimer = sec.label && sec.label.startsWith('⚠');
+      const doneTxt = isWarnTimer ? '⚠ Jetzt mit 5.2.3 beginnen!' : '✓ Abgelaufen';
+      const doneColor = isWarnTimer ? 'var(--warn)' : 'var(--ok)';
+      const btnText = ts.running ? '⏱ Läuft…' : ts.done ? doneTxt : `▶ ${sec.label || 'Timer'} starten`;
+      return `<div class="timer-block" style="${isWarnTimer ? 'background:var(--bg);border:1px solid #f0883e30;border-radius:8px;padding:.75rem;' : ''}">
+        <div class="timer-lbl" style="${isWarnTimer ? 'color:var(--warn)' : ''}">${sec.label || 'Timer'}${sec.note ? ' · ' + sec.note : ''}</div>
+        <div class="timer-display" id="disp-${tid}" style="color:${ts.done ? doneColor : (ts.remaining <= 0 ? doneColor : 'var(--ok)') }">${display}</div>
+        <button class="timer-start-btn ${ts.running ? 'running' : ''} ${isWarnTimer ? 'warn-timer' : ''}"
+          id="btn-${tid}" data-warn="${isWarnTimer ? '1' : '0'}"
+          onclick="startTimer('${tid}', ${sec.duration_min * 60})"
+          ${ts.running || ts.done ? 'disabled' : ''}>${btnText}</button>
+        ${(ts.running && !ts.done) ? `<button onclick="resetTimer('${tid}', ${sec.duration_min * 60})"
+          style="margin-top:.3rem;width:100%;padding:.35rem;border-radius:6px;border:1px solid var(--border);
+          background:transparent;color:var(--muted);font-family:IBM Plex Sans,sans-serif;font-size:.72rem;cursor:pointer;">
+          ✕ Zurücksetzen</button>` : ''}
+      </div>`;
+    }
+    case 'samplesheet':   return renderSamplesheet();
+    case 'calculator':    return renderCalculator();
+    case 'reagent_table': return renderReagentTable(sec);
+    case 'info_box':      return `<div class="info-box">ℹ ${sec.text}</div>`;
+    case 'wash_sequence':
+      return '<div class="wash-seq">' + sec.items.map(function(w, wi) {
+        const wtid = 'wash-' + uid + '-' + wi;
+        if (!state.timerState[wtid]) {
+          state.timerState[wtid] = { remaining: w.timer_s, running: false, done: false };
+        }
+        const wts = state.timerState[wtid];
+        const wm = Math.floor(wts.remaining / 60);
+        const ws_rem = wts.remaining % 60;
+        const timeDisp = wts.done ? '00:00'
+          : wm > 0 ? wm + ':' + String(ws_rem).padStart(2,'0')
+          : ws_rem + ' s';
+        const timerColor = w.crit ? 'var(--danger)' : 'var(--accent)';
+        const doneColor = 'var(--ok)';
+        const btnIcon = wts.running ? '⏱' : wts.done ? '✓' : '▶';
+        const btnStyle = wts.done
+          ? 'border-color:var(--ok);color:var(--ok);background:#3fb95015'
+          : wts.running
+          ? 'border-color:var(--accent);color:var(--accent)'
+          : w.crit ? 'border-color:var(--danger);color:var(--danger)' : '';
+        const progressPct = wts.done ? 100
+          : wts.running ? Math.round((1 - wts.remaining / w.timer_s) * 100) : 0;
+        const rowBorder = w.crit ? 'border-color:#f8514955' : wts.done ? 'border-color:#3fb95055' : '';
+        return '<div class="wash-row" style="flex-direction:column;padding:.6rem .75rem;gap:.5rem;' + rowBorder + '">' +
+          '<div style="display:flex;align-items:center;gap:.65rem;width:100%">' +
+          '<span class="wash-cuv">' + w.cuvette + '</span>' +
+          '<span class="wash-time ' + (w.crit ? 'crit' : '') + '">' + w.duration + '</span>' +
+          '<span class="wash-desc">' + w.buffer + (w.desc ? ' · ' + w.desc : '') + '</span>' +
+          '<button style="width:28px;height:28px;border-radius:6px;border:1px solid var(--border);' +
+          'background:transparent;cursor:pointer;font-size:.85rem;flex-shrink:0;' + btnStyle + '"' +
+          ' id="wbtn-' + wtid + '" onclick="startWashTimer(' + "'" + wtid + "'" + ',' + w.timer_s + ')"' +
+          (wts.running || wts.done ? ' disabled' : '') + '>' + btnIcon + '</button>' +
+          '</div>' +
+          (wts.running || wts.done ? (
+            '<div style="width:100%">' +
+            '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem">' +
+            '<div style="font-family:IBM Plex Mono,monospace;font-size:1.6rem;font-weight:600;flex:1;' +
+            'text-align:center;color:' + (wts.done ? doneColor : timerColor) + ';letter-spacing:.05em"' +
+            ' id="wdisp-' + wtid + '">' + timeDisp + '</div>' +
+            (!wts.done ? '<button onclick="resetWashTimer(' + "'" + wtid + "'" + ',' + w.timer_s + ')"' +
+            ' title="Zurücksetzen" style="width:24px;height:24px;border-radius:5px;border:1px solid var(--border);' +
+            'background:transparent;color:var(--muted);cursor:pointer;font-size:.75rem;flex-shrink:0">✕</button>' : '') +
+            (wts.done && w.repeatable ? '<button onclick="resetWashTimer(' + "'" + wtid + "'" + ',' + w.timer_s + ')"' +
+            ' style="padding:.15rem .5rem;border-radius:5px;border:1px solid var(--border);' +
+            'background:transparent;color:var(--muted);font-size:.68rem;cursor:pointer;white-space:nowrap">↺ Wiederholen</button>' : '') +
+            '</div>' +
+            '<div style="height:4px;background:var(--dim);border-radius:2px;overflow:hidden">' +
+            '<div id="wprog-' + wtid + '" style="height:100%;border-radius:2px;transition:width .9s linear;width:' + progressPct + '%;background:' + (wts.done ? doneColor : timerColor) + '"></div>' +
+            '</div></div>'
+          ) : '') +
+          '</div>';
+      }).join('') + '</div>';
+    default: return '';
+  }
+}
+
+function renderCalculator() {
+  const cv = state.calcValues;
+  const leer = cv.leerArrays;
+  const optimal = leer === 0;
+
+  // OT breakdown: verteile Tubes auf OTs von vorne
+  let breakdown = [];
+  let remaining = cv.tubes;
+  for (let i = 0; i < cv.objekttraeger; i++) {
+    const belegt = Math.min(remaining, 5);
+    const frei = 5 - belegt;
+    breakdown.push({ ot: i + 1, belegt, frei });
+    remaining -= belegt;
+  }
+
+  const breakdownHTML = `
+    <div class="nk-ot-breakdown">
+      ${breakdown.map(row => `
+        <div class="nk-ot-row">
+          <span class="nk-ot-label">OT ${row.ot}</span>
+          <span class="nk-ot-detail">
+            ${row.belegt} / 5 belegt
+            ${row.frei > 0 ? `<span class="ot-frei">· ${row.frei} leer</span>` : `<span class="ot-voll">· voll ✓</span>`}
+          </span>
+        </div>`).join('')}
+    </div>`;
+
+  const warnHTML = !optimal ? `
+    <div class="warn-box warn" style="margin-top:.6rem">
+      <span class="warn-icon">⚠</span>
+      <span><strong>${leer} Array${leer > 1 ? 's' : ''} bleiben unbenutzt.</strong>
+      Erwäge einen weiteren Fall zurückzustellen oder NK-Anzahl anzupassen um Material zu sparen.</span>
+    </div>` : `
+    <div class="optimal-hint">✓ Alle Arrays vollständig belegt</div>`;
+
+  return `<div class="calc-block">
+    <div class="calc-q">Laufplanung</div>
+
+    <div class="calc-row">
+      <label>Fallproben</label>
+      <div class="stepper">
+        <button onclick="adjustCalc('proben', -1)">−</button>
+        <input type="number" id="calc-proben" value="${cv.proben}" min="1" max="20" oninput="calcInput()">
+        <button onclick="adjustCalc('proben', 1)">+</button>
+      </div>
+    </div>
+
+    <div class="calc-row">
+      <label>Negativkontrollen</label>
+      <div class="stepper">
+        <button onclick="adjustCalc('nk', -1)">−</button>
+        <input type="number" id="calc-nk" value="${cv.negativkontrolle}" min="0" max="5" oninput="calcInput()">
+        <button onclick="adjustCalc('nk', 1)">+</button>
+      </div>
+    </div>
+
+    <div class="calc-result visible" style="margin-top:.75rem">
+      <div class="result-chips">
+        <div class="r-chip"><span class="r-lbl">Tubes gesamt</span><span class="r-val">${cv.tubes}</span></div>
+        <div class="r-chip"><span class="r-lbl">OT benötigt</span><span class="r-val" style="color:var(--ok)">${cv.objekttraeger}</span></div>
+        <div class="r-chip ${!optimal ? 'r-chip-warn' : ''}">
+          <span class="r-lbl">Auslastung</span>
+          <span class="r-val" style="color:${optimal ? 'var(--ok)' : 'var(--warn)'}">${cv.tubes % 5 === 0 ? '100%' : Math.round((cv.tubes % 5) / 5 * 100) + '% letzter OT'}</span>
+        </div>
+      </div>
+      ${breakdownHTML}
+      ${warnHTML}
+    </div>
+  </div>`;
+}
+
+function renderReagentTable(sec) {
+  const tubes = state.calcValues.tubes || 1;
+  return `<div>
+    <div class="s-label">${sec.note || 'Reagenzien'}</div>
+    <table class="vol-table">
+      <tr><td><div class="vol-name">PCR-Mix A HPV</div><div class="vol-sub">grüner Deckel · −20 °C</div></td><td>${tubes * 11} µl</td></tr>
+      <tr><td><div class="vol-name">PCR-Mix B HPV</div><div class="vol-sub">gelber Deckel · −20 °C</div></td><td>${tubes * 11} µl</td></tr>
+      <tr><td><div class="vol-name">Mastermix gesamt</div><div class="vol-sub">20 µl pro Tube</div></td><td>${tubes * 22} µl</td></tr>
+    </table>
+    <div class="nk-hint">NK-Position: letzter OT · letzter Array</div>
+  </div>`;
+}
+
+function dilRecipes(factor) {
+  // Returns 2-3 practical pipetting suggestions for a given dilution factor
+  const recipes = {
+    2:   [['1 µl', '1 µl H₂O'], ['5 µl', '5 µl H₂O'], ['10 µl', '10 µl H₂O']],
+    5:   [['1 µl', '4 µl H₂O'], ['2 µl', '8 µl H₂O'], ['5 µl', '20 µl H₂O']],
+    10:  [['1 µl', '9 µl H₂O'], ['2 µl', '18 µl H₂O'], ['5 µl', '45 µl H₂O']],
+    20:  [['1 µl', '19 µl H₂O'], ['2 µl', '38 µl H₂O'], ['5 µl', '95 µl H₂O']],
+    50:  [['1 µl', '49 µl H₂O'], ['2 µl', '98 µl H₂O'], ['5 µl', '245 µl H₂O']],
+    100: [['1 µl', '99 µl H₂O'], ['2 µl', '198 µl H₂O'], ['5 µl', '495 µl H₂O']]
+  };
+  return recipes[factor] || [];
+}
+
+function renderDilQbit(i, s) {
+  if (!s.dil) return '';
+  const factor = s.dilFactor || 10;
+  const origQ = parseFloat(s.qbit) || 0;
+  const dilQ = origQ > 0 ? (origQ / factor).toFixed(2) : '';
+  const FACTORS = [2, 5, 10, 20, 50, 100];
+
+  const factorBtns = FACTORS.map(function(f) {
+    const active = f === factor;
+    return '<button onclick="setDilFactor(' + i + ',' + f + ')" style="' +
+      'padding:.25rem .5rem;border-radius:5px;border:1px solid ' +
+      (active ? 'var(--accent)' : 'var(--border)') + ';background:' +
+      (active ? '#58a6ff18' : 'transparent') + ';color:' +
+      (active ? 'var(--accent)' : 'var(--muted)') +
+      ';font-family:IBM Plex Mono,monospace;font-size:.72rem;cursor:pointer;' +
+      (active ? 'font-weight:600;' : '') +
+      '">1:' + f + '</button>';
+  }).join('');
+
+  // Calculation display
+  const calcRow = origQ > 0
+    ? '<div style="display:flex;align-items:center;gap:.5rem;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:.45rem .75rem;margin-bottom:.5rem">' +
+      '<span style="font-family:IBM Plex Mono,monospace;font-size:.72rem;color:var(--muted)">' + origQ + ' ng/µl</span>' +
+      '<span style="color:var(--dim);font-size:.8rem">\u00f7 ' + factor + '</span>' +
+      '<span style="font-family:IBM Plex Mono,monospace;font-size:.9rem;font-weight:600;color:var(--accent)">= ' + dilQ + ' ng/\u00b5l</span>' +
+      '</div>'
+    : '<div style="font-size:.72rem;color:var(--dim);margin-bottom:.5rem">Erst Qbit-Wert oben eintragen</div>';
+
+  // Pipetting recipe suggestions
+  const recipes = dilRecipes(factor);
+  const selectedRecipe = s.dilRecipe !== undefined ? s.dilRecipe : 0;
+  // Sort recipes: selected first, rest below
+  const orderedRecipes = recipes.map(function(r, ri) { return {r: r, ri: ri}; });
+  const selected = orderedRecipes.splice(selectedRecipe, 1)[0];
+  orderedRecipes.unshift(selected);
+
+  const recipeBtns = orderedRecipes.map(function(item) {
+    const r = item.r; const ri = item.ri;
+    const active = ri === selectedRecipe;
+    return '<button onclick="setDilRecipe(' + i + ',' + ri + ')" style="' +
+      'width:100%;padding:.45rem .65rem;border-radius:7px;border:1px solid ' +
+      (active ? 'var(--ok)' : 'var(--border)') + ';background:' +
+      (active ? '#3fb95012' : 'var(--bg)') + ';cursor:pointer;text-align:left;' +
+      'display:flex;align-items:center;gap:.6rem;transition:border-color .12s">' +
+      '<div style="flex:1">' +
+      '<span style="font-family:IBM Plex Mono,monospace;font-size:.78rem;font-weight:600;color:' +
+      (active ? 'var(--ok)' : 'var(--text)') + '">' + r[0] + ' DNA</span>' +
+      '<span style="font-family:IBM Plex Mono,monospace;font-size:.72rem;color:var(--muted);margin-left:.4rem">+ ' + r[1] + '</span>' +
+      '</div>' +
+      (active ? '<span style="font-size:.65rem;color:var(--ok)">\u2713 ausgew\u00e4hlt</span>' : '') +
+      '</button>';
+  }).join('');
+
+  const recipeRow = '<div style="margin-bottom:.5rem">' +
+    '<div style="font-family:IBM Plex Mono,monospace;font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.35rem">Pipettierschema w\u00e4hlen</div>' +
+    '<div style="display:flex;flex-direction:column;gap:.3rem">' + recipeBtns + '</div>' +
+    '</div>';
+
+  // Free note field
+  const noteField = '<input type="text" placeholder="Sonderfall / Abweichung (optional)"' +
+    ' value="' + (s.dilText || '') + '"' +
+    ' oninput="saveSample(' + i + ',\'dilText\',this.value)"' +
+    ' style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;' +
+    'color:var(--muted);font-family:IBM Plex Sans,sans-serif;font-size:.75rem;padding:.3rem .5rem;outline:none">';
+
+  return '<div class="dil-qbit-row" style="margin-top:.5rem">' +
+    '<div style="font-family:IBM Plex Mono,monospace;font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.35rem">Verd\u00fcnnungsfaktor</div>' +
+    '<div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.5rem">' + factorBtns + '</div>' +
+    calcRow +
+    recipeRow +
+    noteField +
+    '</div>';
+}
+
+function setDilRecipe(i, ri) {
+  if (!state.samples[i]) return;
+  state.samples[i].dilRecipe = ri;
+  render();
+}
+
+function setDilFactor(i, factor) {
+  if (!state.samples[i]) return;
+  state.samples[i].dilFactor = factor;
+  updateSampleRow(i);
+  render();
+}
+
+function renderSampleFields(idx, s) {
+  const cat = dnaCat(s);
+  const dnaDisplay = dnaInputVal(s);
+  const dnaClass = cat === 'optimal' ? 'v-optimal' : cat === 'low' ? 'v-low' : (cat === 'weak' || cat === 'high') ? 'v-weak' : 'v-empty';
+  return '<div class="sample-fields">' +
+    '<div class="sf"><label style="text-transform:none">Qbit ng/µl</label>' +
+    '<input type="number" step="0.01" min="0" placeholder="—"' +
+    ' value="' + (s.qbit || '') + '"' +
+    ' oninput="saveSample(' + idx + ',\'qbit\',this.value);updateSampleRow(' + idx + ')"></div>' +
+    '<div class="sf"><label style="text-transform:none">Einsatz µl</label>' +
+    '<input type="number" step="0.5" min="1" max="20" placeholder="—"' +
+    ' value="' + (s.einsatz || '') + '" id="einsatz-' + idx + '"' +
+    ' oninput="saveSample(' + idx + ',\'einsatz\',this.value);updateSampleRow(' + idx + ')"></div>' +
+    '<div class="sf"><label style="text-transform:none">DNA-Input ng</label>' +
+    '<input readonly value="' + dnaDisplay + '" id="dna-' + idx + '" class="' + dnaClass + '"></div>' +
+    '</div>' +
+    '<div class="dil-row">' +
+    '<button class="dil-toggle ' + (s.dil ? 'open' : '') + '" onclick="toggleDil(' + idx + ')">' +
+    (s.dil ? '▾ Verdünnung' : '+ Verdünnung') + '</button>' +
+    '</div>' +
+    renderDilQbit(idx, s);
+}
+
+function renderSamplesheet() {
+  const cv = state.calcValues;
+  const proben = cv.proben || 1;
+  const nk = cv.negativkontrolle || 0;
+  const total = proben + nk;
+
+  for (let i = 0; i < total; i++) {
+    if (!state.samples[i]) {
+      const isNK = i >= proben;
+      state.samples[i] = { fn: isNK ? 'Neg Ctrl' : '', qbit: '', einsatz: isNK ? '5' : '', dnaInput: '', dil: false, dilText: '', qbitDil: '' };
+    }
+  }
+
+  let optCount = 0, lowCount = 0, weakCount = 0, highCount = 0;
+  for (let i = 0; i < proben; i++) {
+    const cat = dnaCat(state.samples[i]);
+    if (cat === 'optimal') optCount++;
+    else if (cat === 'low')  lowCount++;
+    else if (cat === 'weak') weakCount++;
+    else if (cat === 'high') highCount++;
+  }
+  const summaryHTML = '<div class="ss-summary">' +
+    (optCount ? '<span class="s-ok">✓ ' + optCount + ' optimal</span>' : '') +
+    (lowCount  ? '<span class="s-warn">⚠ ' + lowCount + ' schwach</span>' : '') +
+    (weakCount ? '<span class="s-bad">⚡ ' + weakCount + ' sehr schwach</span>' : '') +
+    (highCount ? '<span class="s-bad">↑ ' + highCount + ' zu hoch</span>' : '') +
+    (!optCount && !lowCount && !weakCount && !highCount ? '<span>Qbit-Werte eintragen</span>' : '') +
+    '</div>';
+
+  const rowsHTML = Array.from({length: total}, function(_, i) {
+    const isNK = i >= proben;
+    const s = state.samples[i];
+    const cat = isNK ? 'nk' : dnaCat(s);
+    const rowClass = isNK ? 'row-nk' : (cat !== 'empty' ? 'row-' + cat : '');
+    const badgeText = isNK ? '' : cat === 'optimal' ? '100–200 ng ✓' : cat === 'low' ? '10–99 ng' : cat === 'weak' ? '< 10 ng ⚡' : cat === 'high' ? '> 200 ng ↑' : '';
+    const badgeClass = cat === 'optimal' ? 'badge-optimal' : cat === 'low' ? 'badge-low' : (cat === 'weak' || cat === 'high') ? 'badge-weak' : 'badge-empty';
+
+    return '<div class="sample-row ' + rowClass + '" id="srow-' + i + '">' +
+      '<div class="sample-head">' +
+      '<span class="tube-nr ' + (isNK ? 'nk' : '') + '">' + (i+1) + '</span>' +
+      '<input class="fn-input" placeholder="' + (isNK ? 'Neg Ctrl' : 'Fallnummer…') + '"' +
+      ' value="' + (s.fn || '') + '"' + (isNK ? ' readonly' : '') +
+      ' oninput="saveSample(' + i + ',\'fn\',this.value)">' +
+      (badgeText ? '<span class="input-badge ' + badgeClass + '">' + badgeText + '</span>' : '') +
+      '</div>' +
+      (isNK
+        ? '<div style="display:flex;flex-direction:column;gap:.35rem;margin-top:.1rem">' +'<div style="display:flex;align-items:center;gap:.75rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.5rem .75rem">' +'<span style="font-family:IBM Plex Mono,monospace;font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);min-width:4.5rem">Reagenz</span>' +'<span style="font-family:IBM Plex Mono,monospace;font-size:.82rem;font-weight:600;color:var(--text)">Nukleasefreies H₂O</span>' +'</div>' +'<div style="display:flex;align-items:center;gap:.75rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.5rem .75rem">' +'<span style="font-family:IBM Plex Mono,monospace;font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);min-width:4.5rem">Einsatz</span>' +'<span style="font-family:IBM Plex Mono,monospace;font-size:1.1rem;font-weight:600;color:var(--accent)">5 µl</span>' +'<span style="font-size:.68rem;color:var(--dim)">— fix</span>' +'</div>' +'<div style="font-size:.68rem;color:var(--dim);font-family:IBM Plex Mono,monospace;padding:.1rem .2rem">Kein Qbit-Wert · nicht aus DNA-Bestand pipettieren</div>' +'</div>'
+        : renderSampleFields(i, s)) +
+      '</div>';
+  }).join('');
+
+  return '<div>' + summaryHTML + '<div class="samplesheet" style="margin-top:.6rem">' + rowsHTML + '</div></div>';
+}
+
+function effectiveQbit(s) {
+  // If dilution active → calculate diluted qbit from factor
+  if (s.dil && s.dilFactor && parseFloat(s.qbit) > 0) {
+    return parseFloat(s.qbit) / s.dilFactor;
+  }
+  return parseFloat(s.qbit);
+}
+
+function dnaCat(s) {
+  const q = effectiveQbit(s);
+  const e = parseFloat(s.einsatz);
+  if (isNaN(q) || isNaN(e) || q === 0 || e === 0) return 'empty';
+  const input = q * e;
+  if (input > 200) return 'high';
+  if (input >= 100) return 'optimal';
+  if (input >= 10)  return 'low';
+  return 'weak';
+}
+
+function dnaInputVal(s) {
+  const q = effectiveQbit(s);
+  const e = parseFloat(s.einsatz);
+  if (isNaN(q) || isNaN(e) || q === 0 || e === 0) return '';
+  return (q * e).toFixed(1) + ' ng';
+}
+
+function saveSample(idx, field, value) {
+  if (!state.samples[idx]) state.samples[idx] = {};
+  state.samples[idx][field] = value;
+  // Auto-suggest einsatz when qbit changes
+  if (field === 'qbit') {
+    const q = parseFloat(value);
+    if (!isNaN(q) && q > 0) {
+      const suggested = q < 20 ? '10' : '5';
+      if (!state.samples[idx].einsatz || state.samples[idx].einsatz === '5' || state.samples[idx].einsatz === '10') {
+        state.samples[idx].einsatz = suggested;
+        const eEl = document.getElementById('einsatz-' + idx);
+        if (eEl) eEl.value = suggested;
+      }
+    }
+    updateSampleRow(idx);
+  }
+}
+
+function updateSampleRow(idx) {
+  const s = state.samples[idx];
+  const cat = dnaCat(s);
+  const dnaEl = document.getElementById('dna-' + idx);
+  if (dnaEl) {
+    dnaEl.value = dnaInputVal(s);
+    dnaEl.className = cat === 'optimal' ? 'v-optimal' : cat === 'low' ? 'v-low' : cat === 'weak' || cat === 'high' ? 'v-weak' : 'v-empty';
+  }
+  // Update row border
+  const rowEl = document.getElementById('srow-' + idx);
+  if (rowEl) {
+    rowEl.className = `sample-row ${cat !== 'empty' && cat !== 'nk' ? 'row-' + cat : ''}`;
+  }
+  // Update badge
+  const headEl = rowEl?.querySelector('.input-badge');
+  if (headEl) {
+    const badgeText = cat === 'optimal' ? '100–200 ng ✓' : cat === 'low' ? '10–99 ng' : cat === 'weak' ? '< 10 ng ⚡' : cat === 'high' ? '> 200 ng ↑' : '';
+    const badgeClass = cat === 'optimal' ? 'badge-optimal' : cat === 'low' ? 'badge-low' : cat === 'weak' || cat === 'high' ? 'badge-weak' : 'badge-empty';
+    headEl.textContent = badgeText;
+    headEl.className = `input-badge ${badgeClass}`;
+  }
+}
+
+function toggleDil(idx) {
+  if (!state.samples[idx]) return;
+  state.samples[idx].dil = !state.samples[idx].dil;
+  if (state.samples[idx].dil && !state.samples[idx].dilFactor) {
+    state.samples[idx].dilFactor = 10; // default 1:10
+  }
+  render();
+}
+
+// ═══════════════════════════════════════════════════════
+// NAVIGATION & STATE MUTATIONS
+// ═══════════════════════════════════════════════════════
+function now() {
+  return new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+}
+
+function saveNote(idx) {
+  const el = document.getElementById('note-' + idx);
+  if (el) state.notes[idx] = el.value;
+}
+
+function toggleCheck(key) {
+  // Persist before toggling
+  state.checks[key] = !state.checks[key];
+  // Re-render just this item without full re-render
+  const parts = key.split('-');
+  const cardIdx = parseInt(parts[0]);
+  const secIdx  = parseInt(parts[1]);
+  const itemIdx = parseInt(parts[2]);
+  const checked = state.checks[key];
+  // Find the element — it's the nth check-item in the nth checklist
+  const checklists = document.querySelectorAll('.checklist');
+  // Count checklist sections before this one
+  let clCount = 0;
+  state.flatSubsteps[cardIdx].data.sections.forEach((sec, si) => {
+    if (sec.type === 'confirm') return;
+    if (si < secIdx && sec.type === 'checklist') clCount++;
+  });
+  const cl = checklists[clCount];
+  if (!cl) return;
+  const item = cl.children[itemIdx];
+  if (!item) return;
+  item.classList.toggle('checked', checked);
+  const box = item.querySelector('.check-box');
+  if (box) box.textContent = checked ? '✓' : '';
+}
+
+function goto(idx) {
+  if (idx < 0 || idx >= TOTAL) return;
+  // Save note before leaving
+  const noteEl = document.getElementById('note-' + state.current);
+  if (noteEl) state.notes[state.current] = noteEl.value;
+
+  const sub = state.flatSubsteps[idx];
+  if (sub.data.conditional) {
+    const val = state.calcValues[sub.data.conditional.field] || 0;
+    const passes = val >= sub.data.conditional.value;
+    if (!passes) {
+      if (!state.confirmed.has(idx)) { state.confirmed.add(idx); state.timestamps[idx] = now(); }
+      const dir = idx > state.current ? 1 : -1;
+      state.current = idx;
+      goto(idx + dir);
+      return;
+    }
+  }
+  state.current = idx;
+  render();
+}
+
+function navigate(dir) { goto(state.current + dir); }
+
+function confirmSubstep() {
+  const idx = state.current;
+  if (state.confirmed.has(idx)) return;
+  // Save note
+  const noteEl = document.getElementById('note-' + idx);
+  if (noteEl) state.notes[idx] = noteEl.value;
+  state.confirmed.add(idx);
+  state.timestamps[idx] = now();
+  updateRail(); updateDots(); updateProgress();
+  if (idx + 1 < TOTAL) setTimeout(() => goto(idx + 1), 280);
+  else setTimeout(showComplete, 300);
+}
+
+function adjustCalc(field, delta) {
+  if (field === 'proben') {
+    const inp = document.getElementById('calc-proben');
+    if (!inp) return;
+    const newVal = Math.max(1, Math.min(20, parseInt(inp.value || 1) + delta));
+    inp.value = newVal;
+  } else {
+    const inp = document.getElementById('calc-nk');
+    if (!inp) return;
+    const newVal = Math.max(0, Math.min(5, parseInt(inp.value || 0) + delta));
+    inp.value = newVal;
+  }
+  calcInput();
+}
+
+function calcInput() {
+  const pInp = document.getElementById('calc-proben');
+  const nInp = document.getElementById('calc-nk');
+  if (!pInp) return;
+  const proben = Math.max(1, Math.min(20, parseInt(pInp.value) || 1));
+  const nk     = Math.max(0, Math.min(5,  parseInt(nInp?.value) || 0));
+  pInp.value = proben;
+  if (nInp) nInp.value = nk;
+  recalcValues(proben, nk);
+}
+
+function recalcValues(proben, nk) {
+  const tubes = proben + nk;
+  const objekttraeger = Math.ceil(tubes / 5);
+  const leerArrays = (objekttraeger * 5) - tubes;
+  state.calcValues = { proben, negativkontrolle: nk, tubes, objekttraeger, leerArrays, nkModus: 'custom' };
+  render();
+}
+
+function setNKModus() {} // kept for compat, no longer used
+
+function resetWashTimer(tid, totalSecs) {
+  const ts = state.timerState[tid];
+  if (!ts) return;
+  if (ts.interval) clearInterval(ts.interval);
+  state.timerState[tid] = { remaining: totalSecs, running: false, done: false };
+  render();
+}
+
+function startWashTimer(tid, totalSecs) {
+  const ts = state.timerState[tid];
+  if (!ts || ts.running || ts.done) return;
+  ts.running = true;
+  // Initial render to show timer display
+  render();
+  ts.interval = setInterval(function() {
+    ts.remaining--;
+    // Update display elements directly for performance
+    const disp = document.getElementById('wdisp-' + tid);
+    const prog = document.getElementById('wprog-' + tid);
+    const m = Math.floor(ts.remaining / 60);
+    const s = ts.remaining % 60;
+    if (disp) disp.textContent = m > 0 ? m + ':' + String(s).padStart(2,'0') : s + ' s';
+    if (prog) prog.style.width = Math.round((1 - ts.remaining / totalSecs) * 100) + '%';
+    if (ts.remaining <= 0) {
+      clearInterval(ts.interval);
+      ts.running = false;
+      ts.done = true;
+      render();
+    }
+  }, 1000);
+}
+
+function resetTimer(tid, totalSecs) {
+  const ts = state.timerState[tid];
+  if (!ts) return;
+  if (ts.interval) clearInterval(ts.interval);
+  state.timerState[tid] = { remaining: totalSecs, running: false, done: false };
+  render();
+}
+
+function startTimer(tid, totalSecs) {
+  const ts = state.timerState[tid];
+  if (!ts || ts.running || ts.done) return;
+  ts.running = true;
+  ts.isWarn = document.getElementById('btn-' + tid)?.dataset.warn === '1';
+  const btn = document.getElementById('btn-' + tid);
+  const disp = document.getElementById('disp-' + tid);
+  if (btn) { btn.textContent = '⏱ Läuft…'; btn.classList.add('running'); btn.disabled = true; }
+  ts.interval = setInterval(() => {
+    ts.remaining--;
+    const m = Math.floor(ts.remaining / 60), s = ts.remaining % 60;
+    if (disp) disp.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    if (ts.remaining <= 0) {
+      clearInterval(ts.interval);
+      ts.running = false; ts.done = true;
+      if (disp) {
+        disp.textContent = '00:00';
+        // Warning timers pulse orange when done
+        disp.style.color = ts.isWarn ? 'var(--warn)' : 'var(--ok)';
+      }
+      if (btn) btn.textContent = ts.isWarn ? '⚠ Jetzt mit 5.2.3 beginnen!' : '✓ Abgelaufen';
+    }
+  }, 1000);
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER UI
+// ═══════════════════════════════════════════════════════
+function render() {
+  const idx = state.current;
+  const confirmed = state.confirmed.has(idx);
+
+  document.getElementById('cardViewport').innerHTML = renderCard(idx);
+
+  const btn = document.getElementById('btnConfirm');
+  const confirmText = state.flatSubsteps[idx].data.sections.find(s => s.type === 'confirm')?.text || 'Bestätigen';
+  if (confirmed) {
+    btn.textContent = '✓ ' + confirmText;
+    btn.className = 'confirm-btn done';
+    btn.disabled = true;
+  } else {
+    btn.textContent = confirmText;
+    btn.className = 'confirm-btn';
+    btn.disabled = false;
+  }
+
+  document.getElementById('btnBack').disabled = idx === 0;
+  document.getElementById('btnFwd').disabled = idx >= TOTAL - 1;
+  document.getElementById('topProgress').textContent = `${idx + 1} / ${TOTAL}`;
+
+  updateDots(); updateRail(); updateProgress();
+}
+
+function updateDots() {
+  const idx = state.current;
+  const { stepIdx } = state.flatSubsteps[idx];
+  const stepSubsteps = state.flatSubsteps.map((f, i) => ({ ...f, flat: i })).filter(f => f.stepIdx === stepIdx);
+  document.getElementById('substepDots').innerHTML = stepSubsteps.map(f => {
+    let cls = 'dot';
+    if (f.flat === idx) cls += ' active';
+    else if (state.confirmed.has(f.flat)) cls += ' done';
+    return `<div class="${cls}"></div>`;
+  }).join('');
+}
+
+function updateRail() {
+  const idx = state.current;
+  const { stepIdx } = state.flatSubsteps[idx];
+  document.getElementById('railLabel').textContent = `${PROTOCOL.steps[stepIdx].id} ${PROTOCOL.steps[stepIdx].title}`;
+  document.getElementById('railSub').textContent = `Schritt ${stepIdx + 1} von ${PROTOCOL.steps.length}`;
+  document.getElementById('railSteps').innerHTML = PROTOCOL.steps.map((step, si) => {
+    const stepFlats = state.flatSubsteps.map((f, i) => i).filter(i => state.flatSubsteps[i].stepIdx === si);
+    const allDone = stepFlats.every(fi => state.confirmed.has(fi));
+    const isCurrent = si === stepIdx;
+    let cls = 'rail-step' + (allDone ? ' done' : isCurrent ? ' active' : '');
+    return `<div class="${cls}" onclick="jumpToStep(${si})">
+      <div class="rail-dot">${allDone ? '✓' : si + 1}</div>
+      <div class="rail-step-title">${step.id} ${step.title}</div>
+    </div>`;
+  }).join('');
+}
+
+function updateProgress() {
+  document.getElementById('progFill').style.width = Math.round((state.confirmed.size / TOTAL) * 100) + '%';
+}
+
+function jumpToStep(si) {
+  const firstFlat = state.flatSubsteps.findIndex(f => f.stepIdx === si);
+  if (firstFlat >= 0) goto(firstFlat);
+  toggleRail();
+}
+
+function toggleRail() {
+  document.getElementById('stepRail').classList.toggle('open');
+}
+
+// ═══════════════════════════════════════════════════════
+// COMPLETE + PDF EXPORT
+// ═══════════════════════════════════════════════════════
+function showComplete() {
+  // Save last note
+  const noteEl = document.getElementById('note-' + state.current);
+  if (noteEl) state.notes[state.current] = noteEl.value;
+
+  document.getElementById('cardViewport').innerHTML = `
+    <div class="complete-card">
+      <div class="complete-icon">✅</div>
+      <h2>Protokoll abgeschlossen</h2>
+      <p>EUROArray HPV-Nachweis erfolgreich durchgeführt und dokumentiert.</p>
+      <button class="pdf-btn" onclick="exportPDF()">📄 Protokoll als PDF exportieren</button>
+      <div class="log" id="compLog"></div>
+      <button class="restart-btn" onclick="location.reload()">↺ Neuen Lauf starten</button>
+    </div>`;
+
+  document.getElementById('substepDots').innerHTML = '';
+  document.getElementById('btnConfirm').style.display = 'none';
+  document.getElementById('btnBack').disabled = true;
+  document.getElementById('btnFwd').disabled = true;
+
+  // Summary log
+  const logEl = document.getElementById('compLog');
+  logEl.innerHTML = state.flatSubsteps.map((f, i) => {
+    const ts = state.timestamps[i] || '—';
+    const note = state.notes[i] ? `<span class="log-note">📝 ${state.notes[i]}</span>` : '';
+    const skipped = f.data.conditional && !state.notes[i] && state.timestamps[i] && !note;
+    return `<div class="log-row">
+      <span class="ok">✓</span>
+      <span class="log-id">${f.data.id}</span>
+      <span class="log-title">${f.data.title}</span>
+      <span class="dim">${ts}</span>
+      ${note}
+    </div>`;
+  }).join('') +
+  `<div style="margin-top:.5rem;color:var(--accent);font-size:.7rem">
+    06 AA INF 001 · ${new Date().toLocaleDateString('de-DE')} · TU München Molekularpathologie
+  </div>`;
+}
+
+function exportPDF() {
+  const date = new Date().toLocaleDateString('de-DE');
+  const time = new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+  const cv = state.calcValues;
+
+  // Build rows
+  const rows = state.flatSubsteps.map((f, i) => {
+    const ts = state.timestamps[i] || '—';
+    const note = state.notes[i] || '';
+    const noteRow = note
+      ? `<tr class="note-row"><td colspan="3"><span class="note-label">📝 Notiz:</span> ${note}</td></tr>`
+      : '';
+    return `<tr>
+      <td class="col-id">${f.data.id}</td>
+      <td class="col-title">${f.data.icon || ''} ${f.data.title}</td>
+      <td class="col-time">${ts}</td>
+    </tr>${noteRow}`;
+  }).join('');
+
+  // Samplesheet section for PDF
+  const cv2 = state.calcValues;
+  const ssRows = Array.from({length: cv2.tubes || 1}, (_, i) => {
+    const s = state.samples[i] || {};
+    const isNK = i >= (cv2.proben || 0);
+    const dna = isNK ? '—' : dnaInputVal(s) || '—';
+    const qbitDisplay = isNK ? '—' : (s.qbit || '—') + (s.dil && s.dilFactor ? ' ÷' + s.dilFactor + ' = ' + (parseFloat(s.qbit)/s.dilFactor).toFixed(2) + ' ng/µl' : '');
+    const cat = isNK ? '' : dnaCat(s);
+    const dnaColor = cat === 'optimal' ? '#2d7a2d' : cat === 'low' ? '#c05e00' : cat === 'weak' || cat === 'high' ? '#b71c1c' : '#999';
+    return `<tr>
+      <td style="text-align:center;color:#888">${i+1}</td>
+      <td>${s.fn || (isNK ? 'Neg Ctrl' : '—')}</td>
+      <td style="text-align:right;font-family:monospace">${isNK ? '—' : (s.qbit || '—')}${s.dil && s.qbitDil ? ' \u2192 ' + s.qbitDil : ''}</td>
+      <td style="text-align:right;font-family:monospace">${isNK ? '5 µl · H₂O' : (s.einsatz ? s.einsatz + ' µl' : '—')}</td>
+      <td style="text-align:right;font-family:monospace;color:${dnaColor};font-weight:600">${dna}</td>
+      <td style="color:#888;font-style:italic;font-size:8pt">${(function(){ if(!s.dil) return ''; const r = dilRecipes(s.dilFactor||10)[s.dilRecipe||0]; const recipe = r ? r[0]+' DNA + '+r[1] : ''; return '1:' + (s.dilFactor||10) + (recipe ? ' • ' + recipe : '') + (s.dilText ? ' • ' + s.dilText : ''); })()}</td>
+    </tr>`;
+  }).join('');
+
+  const ssSection = `
+    <div class="section-head">Samplesheet / Pipettiervorlage</div>
+    <table>
+      <thead><tr>
+        <th style="width:24pt;text-align:center">#</th>
+        <th>Fallnummer</th>
+        <th style="width:60pt;text-align:right">Qbit ng/µl</th>
+        <th style="width:56pt;text-align:right">Einsatz</th>
+        <th style="width:60pt;text-align:right">DNA-Input</th>
+        <th>Verdünnung</th>
+      </tr></thead>
+      <tbody>${ssRows}</tbody>
+    </table>`;
+  const hasNotes = Object.values(state.notes).some(n => n && n.trim());
+  const notesSection = hasNotes ? `
+    <div class="section-head">Notizen &amp; Abweichungen</div>
+    <table class="notes-table">
+      ${state.flatSubsteps.map((f, i) => {
+        const note = state.notes[i];
+        if (!note || !note.trim()) return '';
+        return `<tr>
+          <td class="col-id">${f.data.id}</td>
+          <td class="col-title">${f.data.title}</td>
+          <td class="col-note">${note}</td>
+        </tr>`;
+      }).join('')}
+    </table>` : '';
+
+  const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">
+  <title>Protokoll HPV EUROArray ${date}</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 10pt; color: #111; margin: 2cm; }
+    h1 { font-size: 14pt; margin-bottom: 2pt; }
+    .meta { font-size: 8pt; color: #555; margin-bottom: 16pt; }
+    .params { display: flex; gap: 24pt; margin-bottom: 12pt; }
+    .param { font-size: 9pt; }
+    .param strong { display: block; font-size: 7.5pt; color: #888; text-transform: uppercase; letter-spacing: .05em; }
+    .section-head { font-size: 8pt; text-transform: uppercase; letter-spacing: .08em; color: #888; border-bottom: 1px solid #ddd; padding-bottom: 3pt; margin: 12pt 0 6pt; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 4pt 6pt; border-bottom: 1px solid #eee; vertical-align: top; font-size: 9pt; }
+    .col-id { width: 48pt; color: #888; font-family: monospace; font-size: 8pt; white-space: nowrap; }
+    .col-time { width: 36pt; text-align: right; color: #555; white-space: nowrap; }
+    .col-title { color: #111; }
+    .col-note { color: #333; font-style: italic; }
+    .note-row td { background: #fffbf0; border-bottom: 1px solid #f0e8cc; padding: 3pt 6pt 3pt 54pt; font-size: 8.5pt; color: #7a5c00; }
+    .note-label { font-weight: bold; }
+    .notes-table td { border-bottom: 1px solid #eee; }
+    .footer { margin-top: 20pt; font-size: 7.5pt; color: #aaa; border-top: 1px solid #eee; padding-top: 6pt; }
+    .sig-block { margin-top: 24pt; display: flex; gap: 40pt; }
+    .sig-line { border-top: 1px solid #aaa; padding-top: 4pt; font-size: 8pt; color: #555; min-width: 120pt; }
+    @media print { body { margin: 1.5cm; } }
+  </style>
+  </head><body>
+  <h1>Laufprotokoll – HPV-Nachweis mittels EUROArray</h1>
+  <div class="meta">SOP 06 AA INF 001 · Version 002/01.2024 · Erstellt: ${date} ${time} · TU München Molekularpathologie</div>
+  <div class="params">
+    <div class="param"><strong>Fallproben</strong>${cv.proben}</div>
+    <div class="param"><strong>Negativkontrolle</strong>${cv.negativkontrolle}</div>
+    <div class="param"><strong>Tubes gesamt</strong>${cv.tubes}</div>
+    <div class="param"><strong>Objektträger (OT)</strong>${cv.objekttraeger}</div>
+    <div class="param"><strong>PCR-Mix A+B je</strong>${cv.tubes * 11} µl</div>
+  </div>
+  ${ssSection}
+  <div class="section-head">Durchgeführte Schritte</div>
+  <table><tbody>${rows}</tbody></table>
+  ${notesSection}
+  <div class="sig-block">
+    <div class="sig-line">Durchgeführt von</div>
+    <div class="sig-line">Datum / Uhrzeit</div>
+    <div class="sig-line">Gegengezeichnet</div>
+  </div>
+  <div class="footer">
+    Ausgedruckt: ${date} ${time} · Aufbewahrung QM ≥ 10 Jahre · Patientendaten: gesetzliche Fristen
+  </div>
+  </body></html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => win.print(), 400);
+}
+
+// ── Init ──
+render();
+</script>
+</body>
+</html>
